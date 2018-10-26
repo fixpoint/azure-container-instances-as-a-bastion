@@ -1,0 +1,211 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "location": {
+      "defaultValue": "[resourceGroup().location]",
+      "type": "String"
+    },
+    "vnetName": {
+      "defaultValue": "[uniqueString(resourceGroup().id)]",
+      "type": "String"
+    },
+    "subnetName": {
+      "defaultValue": "default",
+      "type": "String"
+    },
+    "storageName": {
+      "defaultValue": "[uniqueString(resourceGroup().id)]",
+      "type": "String"
+    },
+    "vmName": {
+      "defaultValue": "[uniqueString(resourceGroup().id)]",
+      "type": "String"
+    },
+    "vmSize": {
+      "defaultValue": "Standard_B1s",
+      "type": "String"
+    },
+    "publicKeyData": {
+      "defaultValue": "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDig4H0Toi7hDDoXs4rJDSgbbHgR22XRlCYXlbpRenGD1sieFDBgM49cnp5V7h8SI3azaY2jHM5uVN6o4gm2/P2qqTCCJnz/ZQacoHq0Ef63Ivel+Zh9cOpSXEmXiumZZdnpK0XX6UqaIw41FNYKkF3vDCDECXkSB2wPiIPx70B78Up19phuVKvtCR3eJktgTWf0bNmzBosfPTUAIYHAZwBjEu9oGdr5E62wXXNi0PpvKSejqwO/acFa8WUDo9yglsM3NucehZEOrBGcwdBG1tUz7YUKkiDU/Duf2pghaOAlJkF+LlLaZYSEEHFbZUQAuBIYm1AnvyddPLA+k/hCXd7",
+      "type": "String"
+    },
+    "nicName": {
+      "defaultValue": "[uniqueString(resourceGroup().id)]",
+      "type": "String"
+    },
+    "nsgName": {
+      "defaultValue": "[uniqueString(resourceGroup().id)]",
+      "type": "String"
+    }
+  },
+  "outputs": {
+      "vnetName": {
+          "type": "String",
+          "value": "[parameters('vnetName')]"
+      }
+  },
+  "variables": {},
+  "resources": [ {
+    "type": "Microsoft.Compute/virtualMachines",
+    "name": "[parameters('vmName')]",
+    "apiVersion": "2018-06-01",
+    "location": "[parameters('location')]",
+    "tags": {},
+    "properties": {
+      "hardwareProfile": {
+        "vmSize": "[parameters('vmSize')]"
+      },
+      "storageProfile": {
+        "imageReference": {
+          "publisher": "Canonical",
+          "offer": "UbuntuServer",
+          "sku": "16.04-LTS",
+          "version": "latest"
+        },
+        "osDisk": {
+          "osType": "Linux",
+          "name": "[parameters('vmName')]",
+          "createOption": "FromImage",
+          "vhd": {
+            "uri": "[concat('https://', parameters('storageName'), '.blob.core.windows.net', concat('/vhds/', parameters('vmName'),'.vhd'))]"
+          },
+          "caching": "ReadWrite",
+          "diskSizeGB": 30
+        },
+        "dataDisks": []
+      },
+      "osProfile": {
+        "computerName": "[parameters('vmName')]",
+        "adminUsername": "azure-user",
+        "linuxConfiguration": {
+          "disablePasswordAuthentication": true,
+          "ssh": {
+            "publicKeys": [ {
+              "path": "/home/azure-user/.ssh/authorized_keys",
+              "keyData": "[parameters('publicKeyData')]"
+            } ]
+          },
+          "provisionVMAgent": true
+        },
+        "secrets": [],
+        "allowExtensionOperations": true
+      },
+      "networkProfile": {
+        "networkInterfaces": [ {
+          "id": "[resourceId('Microsoft.Network/networkInterfaces', parameters('nicName'))]"
+        } ]
+      }
+    },
+    "dependsOn": [
+      "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageName'))]",
+      "[resourceId('Microsoft.Network/networkInterfaces', parameters('nicName'))]"
+    ]
+  }, {
+    "type": "Microsoft.Network/networkInterfaces",
+    "name": "[parameters('nicName')]",
+    "apiVersion": "2018-02-01",
+    "location": "[parameters('location')]",
+    "tags": {},
+    "properties": {
+      "ipConfigurations": [ {
+        "name": "ipconfig1",
+        "properties": {
+          "privateIPAllocationMethod": "Dynamic",
+          "subnet": {
+            "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('vnetName'), parameters('subnetName'))]"
+          },
+          "primary": true,
+          "privateIPAddressVersion": "IPv4"
+        }
+      } ],
+      "dnsSettings": {
+        "dnsServers": []
+      },
+      "enableAcceleratedNetworking": false,
+      "enableIPForwarding": false,
+      "networkSecurityGroup": {
+        "id": "[resourceId('Microsoft.Network/networkSecurityGroups', parameters('nsgName'))]"
+      },
+      "primary": true
+    },
+    "dependsOn": [
+      "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('vnetName'), parameters('subnetName'))]",
+      "[resourceId('Microsoft.Network/networkSecurityGroups', parameters('nsgName'))]"
+    ]
+  }, {
+    "type": "Microsoft.Network/networkSecurityGroups",
+    "name": "[parameters('nsgName')]",
+    "apiVersion": "2018-02-01",
+    "location": "[parameters('location')]",
+    "tags": {},
+    "properties": {
+      "securityRules": []
+    },
+    "dependsOn": []
+  }, {
+    "type": "Microsoft.Network/virtualNetworks",
+    "name": "[parameters('vnetName')]",
+    "apiVersion": "2018-02-01",
+    "location": "[parameters('location')]",
+    "properties": {
+      "addressSpace": {
+        "addressPrefixes": [
+          "10.0.0.0/16"
+        ]
+      },
+      "subnets": [ {
+        "name": "[parameters('subnetName')]",
+        "properties": {
+          "addressPrefix": "10.0.0.0/24"
+        }
+      } ],
+      "virtualNetworkPeerings": [],
+      "enableDdosProtection": false,
+      "enableVmProtection": false
+    },
+    "dependsOn": []
+  }, {
+    "type": "Microsoft.Storage/storageAccounts",
+    "sku": {
+      "name": "Standard_LRS",
+      "tier": "Standard"
+    },
+    "kind": "Storage",
+    "name": "[parameters('storageName')]",
+    "apiVersion": "2018-07-01",
+    "location": "[parameters('location')]",
+    "tags": {},
+    "properties": {
+      "networkAcls": {
+        "bypass": "AzureServices",
+        "virtualNetworkRules": [],
+        "ipRules": [],
+        "defaultAction": "Allow"
+      },
+      "supportsHttpsTrafficOnly": false,
+      "encryption": {
+        "services": {
+          "file": {
+            "enabled": true
+          },
+          "blob": {
+            "enabled": true
+          }
+        },
+        "keySource": "Microsoft.Storage"
+      }
+    },
+    "dependsOn": []
+  }, {
+    "type": "Microsoft.Network/virtualNetworks/subnets",
+    "name": "[concat(parameters('vnetName'), '/', parameters('subnetName'))]",
+    "apiVersion": "2018-02-01",
+    "properties": {
+      "addressPrefix": "10.0.0.0/24"
+    },
+    "dependsOn": [
+      "[resourceId('Microsoft.Network/virtualNetworks', parameters('vnetName'))]"
+    ]
+  } ]
+}
